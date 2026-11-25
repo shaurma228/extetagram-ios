@@ -1,0 +1,116 @@
+name: Build iPhone IPA for SideStore
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_telegram_login:
+        description: Embed your Telegram API credentials in the downloadable IPA
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 240
+    env:
+      APP_BUNDLE_ID: org.chatlab.ios
+    steps:
+      - name: Check out the build scripts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate Telegram API credentials
+        if: inputs.enable_telegram_login
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        run: |
+          if ! [[ "$TELEGRAM_API_ID" =~ ^[1-9][0-9]*$ && "$TELEGRAM_API_HASH" =~ ^[[:xdigit:]]{32}$ ]]; then
+            echo '::error::Set TELEGRAM_API_ID and TELEGRAM_API_HASH in the repository Actions secrets (my.telegram.org/apps).'
+            exit 1
+          fi
+
+      - name: Check out Telegram-iOS
+        uses: actions/checkout@v4
+        with:
+          repository: TelegramMessenger/Telegram-iOS
+          ref: 24638bc69bd083981b178dd1e7f921eebbf7fc46
+          path: telegram-ios
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Select Xcode and free disk space
+        working-directory: telegram-ios
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')
+          selected="/Applications/Xcode_${version}.app"
+          if [[ ! -d "$selected" ]]; then
+            echo "::error::Xcode $version is unavailable on this runner."
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          selected=$(cd "$selected" && pwd -P)
+          sudo xcode-select --switch "$selected/Contents/Developer"
+          if [[ -L /Applications/Xcode.app ]]; then
+            sudo ln -sfn "$selected" /Applications/Xcode.app
+          fi
+          for xcode in /Applications/Xcode_*.app; do
+            if [[ -d "$xcode" && ! -L "$xcode" && "$xcode" != "$selected" ]]; then
+              sudo rm -rf "$xcode"
+            fi
+          done
+          xcodebuild -version
+          df -h .
+
+      - name: Configure the SideStore build
+        working-directory: telegram-ios
+        env:
+          ENABLE_TELEGRAM_LOGIN: ${{ inputs.enable_telegram_login }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        run: |
+          tools="$GITHUB_WORKSPACE/.github"
+          mkdir -p Telegram/Telegram-iOS/ChatLab.xcassets
+          cp -R "$tools/ios-assets/ChatLab.appiconset" Telegram/Telegram-iOS/ChatLab.xcassets/
+          python3 "$tools/scripts/prepare-sidestore.py"
+          cat >> .bazelrc <<'BAZELRC'
+
+          build --//Telegram:disableProvisioningProfiles
+          build --//Telegram:disableExtensions
+          build --features=disable_legacy_signing
+          BAZELRC
+
+      - name: Compile the device IPA
+        working-directory: telegram-ios
+        run: |
+          python3 -u build-system/Make/Make.py build \
+            --configurationPath="$RUNNER_TEMP/telegram-sidestore.json" \
+            --xcodeManagedCodesigning \
+            --configuration=release_arm64 \
+            --buildNumber="$GITHUB_RUN_NUMBER"
+
+      - name: Check the IPA payload
+        working-directory: telegram-ios
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa-check"
+          unzip -q bazel-bin/Telegram/Telegram.ipa -d "$RUNNER_TEMP/ipa-check"
+          app="$RUNNER_TEMP/ipa-check/Payload/Telegram.app"
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")
+          executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Info.plist")
+          [[ "$bundle_id" == "$APP_BUNDLE_ID" ]]
+          [[ ! -d "$app/PlugIns" && ! -e "$app/embedded.mobileprovision" ]]
+          [[ "$(lipo -archs "$app/$executable")" == arm64 ]]
+          xcrun vtool -show-build "$app/$executable" | grep -E 'platform +IOS$'
+          cp bazel-bin/Telegram/Telegram.ipa "$RUNNER_TEMP/ChatLab-SideStore.ipa"
+
+      - name: Upload the IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatLab-SideStore
+          path: ${{ runner.temp }}/ChatLab-SideStore.ipa
+          if-no-files-found: error
+          retention-days: 3
