@@ -1,15 +1,19 @@
 # extetagram-ios
 
-Экспериментальный проект iOS-клиента. GitHub Actions собирает закреплённую версию Telegram-iOS. Функции exteraGram запланированы. **ChatLab Dev** — временное имя сборки для iPhone. [Исходный коммит Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS/commit/24638bc69bd083981b178dd1e7f921eebbf7fc46)
+Независимый клиент для iPhone на базе открытого Telegram-iOS, вдохновлённый exteraGram Lite. **ChatLab Dev** — временное имя приложения. GitHub Actions загружает закреплённую версию Telegram-iOS и применяет изменения из этого репозитория. [Исходники Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS) · [exteraGram Lite](https://github.com/exteraSquad/exteraGram#editions) · [Лицензия Telegram-iOS](https://telegram.org/apps#telegram-for-ios)
 
-Независимый проект. Telegram-iOS распространяется под GNU GPL v2 или новее. Этот репозиторий содержит скрипт с изменениями, которые применяются к указанному коммиту при сборке. [Лицензия исходного клиента](https://telegram.org/apps#telegram-for-ios)
+## Статус
+
+Настроена сборка для SideStore без локального Mac. Проверочный запуск прошёл подготовку и дошёл до компиляции. Установка на iPhone и вход в Telegram пока не проверены. [Проверочный запуск](https://github.com/shaurma228/extetagram-ios/actions/runs/45668836173)
 
 ## Сборка и установка
 
-1. В GitHub откройте **Actions → Build iPhone IPA for SideStore** и запустите workflow вручную.
-2. После завершения скачайте ZIP из раздела **Artifacts** и извлеките файл `.ipa`.
-3. Импортируйте `.ipa` в SideStore. SideStore подпишет и установит приложение на телефоне. [Документация SideStore](https://docs.sidestore.io/)
+1. Открой **Actions → Build iPhone IPA for SideStore → Run workflow**. [Workflow на GitHub](https://github.com/shaurma228/extetagram-ios/actions/workflows/build-sidestore.yml)
+2. После успешной сборки скачай архив `ChatLab-SideStore` из раздела **Artifacts** и извлеки `ChatLab-SideStore.ipa`.
+3. На iPhone выбери IPA через **SideStore → My Apps → +**. SideStore подпишет и установит приложение. [Документация SideStore](https://docs.sidestore.io/)
 
-По умолчанию сборка не требует учётных данных Telegram API: она предназначена для проверки компиляции, установки и запуска. Войти в Telegram с ней нельзя. Расширения и фоновые push-уведомления в прототипе не поддерживаются.
+Сборка по умолчанию предназначена для проверки установки и запуска. Для входа в Telegram собери приложение в приватной копии проекта со своими Telegram API-ключами. Ключи встраиваются в IPA. [Получение ключей](https://core.telegram.org/api/obtaining_api_id)
 
-Для сборки с входом в Telegram используйте приватный репозиторий. Добавьте собственные `TELEGRAM_API_ID` и `TELEGRAM_API_HASH` в **Settings → Secrets and variables → Actions**, затем включите `enable_telegram_login` при запуске workflow. Значения встраиваются в IPA. [Получение ключей Telegram](https://core.telegram.org/api/obtaining_api_id)
+## Развитие проекта
+
+[План реализации](PLAN.md)
