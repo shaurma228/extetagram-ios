@@ -8,7 +8,7 @@
 
 ## Сборка и установка
 
-1. Открой **Actions → Build iPhone IPA for SideStore → Run workflow**. [Workflow на GitHub](https://github.com/shaurma228/extetagram-ios/actions/workflows/build-sidestore.yml)
+1. Открой **Actions → Build iPhone IPA for SideStore → Run workflow** и выбери ветку `dev`. [Workflow на GitHub](https://github.com/shaurma228/extetagram-ios/actions/workflows/build-sidestore.yml)
 2. После успешной сборки скачай архив `ChatLab-SideStore` из раздела **Artifacts** и извлеки `ChatLab-SideStore.ipa`.
 3. На iPhone выбери IPA через **SideStore → My Apps → +**. SideStore подпишет и установит приложение. [Документация SideStore](https://docs.sidestore.io/)
 
