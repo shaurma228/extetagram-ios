@@ -96,16 +96,47 @@ jobs:
       - name: Check the IPA payload
         working-directory: telegram-ios
         run: |
-          mkdir -p "$RUNNER_TEMP/ipa-check"
-          unzip -q bazel-bin/Telegram/Telegram.ipa -d "$RUNNER_TEMP/ipa-check"
-          app="$RUNNER_TEMP/ipa-check/Payload/Telegram.app"
-          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")
-          executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Info.plist")
-          [[ "$bundle_id" == "$APP_BUNDLE_ID" ]]
-          [[ ! -d "$app/PlugIns" && ! -e "$app/embedded.mobileprovision" ]]
-          [[ "$(lipo -archs "$app/$executable")" == arm64 ]]
-          xcrun vtool -show-build "$app/$executable" | grep -E 'platform +IOS$'
-          cp bazel-bin/Telegram/Telegram.ipa "$RUNNER_TEMP/ChatLab-SideStore.ipa"
+          fail() {
+            printf '::error::%s\n' "$1"
+            exit 1
+          }
+
+          ipa=bazel-bin/Telegram/Telegram.ipa
+          check_dir=$(mktemp -d "$RUNNER_TEMP/ipa-check.XXXXXX")
+          trap 'rm -rf -- "$check_dir"' EXIT
+
+          [[ -f "$ipa" ]] || fail "The build did not produce $ipa."
+          unzip -q "$ipa" -d "$check_dir" || fail "Could not extract $ipa."
+
+          app="$check_dir/Payload/Telegram.app"
+          plist="$app/Info.plist"
+          [[ -f "$plist" ]] || fail "Payload/Telegram.app/Info.plist is missing."
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$plist") ||
+            fail "The app bundle identifier is missing."
+          [[ "$bundle_id" == "$APP_BUNDLE_ID" ]] ||
+            fail "Unexpected bundle identifier: $bundle_id (expected $APP_BUNDLE_ID)."
+          executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$plist") ||
+            fail "The app executable name is missing from Info.plist."
+          [[ -n "$executable" && -f "$app/$executable" ]] ||
+            fail "The app executable is missing from the payload."
+          [[ ! -e "$app/PlugIns" ]] || fail "The IPA contains app extensions."
+          [[ ! -e "$app/embedded.mobileprovision" ]] ||
+            fail "The IPA contains an embedded provisioning profile."
+          archs=$(lipo -archs "$app/$executable") || fail "Could not read the app executable architectures."
+          [[ "$archs" == arm64 ]] || fail "Unexpected app executable architectures: $archs (expected arm64)."
+          build_info=$(xcrun vtool -show-build "$app/$executable") ||
+            fail "Could not read the app executable platform."
+          grep -Eq '^[[:space:]]*platform[[:space:]]+IOS[[:space:]]*$' <<< "$build_info" ||
+            fail "The app executable does not target iOS devices."
+
+          cp "$ipa" "$RUNNER_TEMP/ChatLab-SideStore.ipa"
+          {
+            printf '### SideStore IPA payload\n\n'
+            printf -- '- Workflow run: #%s (attempt %s)\n' "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ATTEMPT"
+            printf -- '- Bundle identifier: `%s`\n' "$bundle_id"
+            printf -- '- Executable: `%s` for iOS devices (`%s`)\n' "$executable" "$archs"
+            printf -- '- App extensions and embedded provisioning profile: absent\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the IPA
         uses: actions/upload-artifact@v4
