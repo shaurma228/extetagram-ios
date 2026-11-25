@@ -11,6 +11,32 @@ def replace_once(source: str, before: str, after: str) -> str:
     return source.replace(before, after, 1)
 
 
+# The pinned rules_apple requires a profile for every device application even
+# when signing is disabled. SideStore supplies its own profile when re-signing.
+ios_rules = Path("build-system/bazel-rules/rules_apple/apple/internal/ios_rules.bzl")
+source = ios_rules.read_text()
+source = replace_once(source, '''            package_messages_support = True,
+        ),
+    )
+
+    if platform_prerequisites.platform.is_device:
+        processor_partials.append(
+            partials.provisioning_profile_partial(
+                actions = actions,
+                profile_artifact = provisioning_profile,
+''', '''            package_messages_support = True,
+        ),
+    )
+
+    if platform_prerequisites.platform.is_device and provisioning_profile:
+        processor_partials.append(
+            partials.provisioning_profile_partial(
+                actions = actions,
+                profile_artifact = provisioning_profile,
+''')
+ios_rules.write_text(source)
+
+
 app_delegate = Path("submodules/TelegramUI/Sources/AppDelegate.swift")
 source = app_delegate.read_text()
 source = replace_once(source, '''        let baseAppBundleId = Bundle.main.bundleIdentifier!
